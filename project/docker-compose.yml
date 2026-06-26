@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  rustfs:
+    image: rustfs/rustfs:latest
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console
+    volumes:
+      - ./rustfs-data:/data
+      - ./rustfs-logs:/logs
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  lab:
+    image: python:3.12-slim
+    working_dir: /workspace
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    volumes:
+      - ./:/workspace
+      - ./local-store:/data/local
+    environment:
+      AWS_ACCESS_KEY_ID: rustfsadmin
+      AWS_SECRET_ACCESS_KEY: rustfsadmin
+      S3_ENDPOINT: "http://rustfs:9000"
+      HF_TOKEN: ${HF_TOKEN:-}
+    command: >
+      bash -c "pip install --quiet duckdb datasets huggingface_hub boto3 pyarrow tqdm && sleep infinity"
+    restart: unless-stopped
